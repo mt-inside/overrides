@@ -2,38 +2,190 @@ mod istio;
 
 extern crate maplit;
 
-use futures::prelude::*;
 use istio::destinationrules_networking_istio_io::*;
-use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
+use istio::virtualservices_networking_istio_io::*;
+use k8s_openapi::api::core::v1::{Pod, Service};
 use kube::{
-    api::{Api, DynamicObject, ListParams, ObjectMeta, Patch, PatchParams, Resource, ResourceExt},
-    runtime::{watcher, WatchStreamExt},
-    Client, CustomResource,
+    api::{Api, ListParams, ObjectMeta},
+    Client,
 };
 use maplit::btreemap;
+use std::collections::BTreeMap;
 use tracing::*;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{filter, prelude::*};
+
+// TODO: make the Display / Format impl
+fn selectorMap2Str(sel: &BTreeMap<String, String>) -> String {
+    sel.iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<String>>()
+        .join(",")
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="info|etc"
-        //.with_max_level(Level::TRACE)
-        .event_format(tracing_subscriber::fmt::format().pretty()) // pretty -> json
+    //tracing_subscriber::fmt()
+    //    .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="override_operator2=off|error|warn|info|debug|trace"
+    //    //.with_max_level(Level::TRACE)
+    //    .event_format(tracing_subscriber::fmt::format().pretty()) // pretty -> json
+    //    .init();
+
+    tracing_subscriber::registry()
+        .with(filter::Targets::new().with_target("override_operator2", Level::TRACE)) //off|error|warn|info|debug|trace
+        .with(
+            tracing_subscriber::fmt::layer()
+                .pretty()
+                .with_file(false) // Don't print events' source file:line
+                .with_writer(std::io::stderr),
+        ) // pretty -> json
         .init();
 
-    info!(event = "Connecting...");
+    debug!("Connecting...");
     let client = Client::try_default().await?;
-    info!(event = "Connected");
+    // TODO: cluster info
+    debug!("Connected");
 
-    let deps: Api<Deployment> = Api::default_namespaced(client.clone());
+    let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
+    let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
     // let drs: Api<DestinationRule> = Api::all(client.clone());
     // let vss: Api<VirtualService> = Api::all(client.clone());
 
-    /* Debug print */
-    for dep in deps.list(&Default::default()).await? {
-        warn!(event = "Found Deploy", ?dep.metadata.name, ?dep.metadata.namespace);
+    for svc in svcs_api
+        .list(&Default::default())
+        .await?
+        .into_iter()
+        // Only services with selectors, eg not "kubernetes"
+        .filter(|s| s.spec.as_ref().unwrap().selector.is_some())
+    {
+        let fqdn = format!(
+            "{}.{}.svc.cluster.local", // TODO: better way to get this?
+            svc.metadata.name.clone().unwrap(),
+            svc.metadata.namespace.clone().unwrap(),
+        );
+        trace!(svc.metadata.name, svc.metadata.namespace, fqdn, "Found SVC");
+
+        let selected_pods = pods_api
+            .list(&ListParams::default().labels(&selectorMap2Str(
+                &(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()),
+            )))
+            .await?;
+
+        for pod in &selected_pods {
+            trace!(
+                pod.metadata.name,
+                pod.metadata.namespace,
+                version = pod
+                    .metadata
+                    .labels
+                    .as_ref()
+                    .unwrap()
+                    .get("version")
+                    .unwrap(),
+                "Selected Pod",
+            );
+        }
+
+        let selected_pod_versions: Vec<String> = selected_pods
+            .iter()
+            .map(|p| {
+                p.metadata
+                    .labels
+                    .as_ref()
+                    .unwrap()
+                    .get("version")
+                    .unwrap()
+                    .clone()
+            })
+            .collect();
+
+        info!(
+            service = svc.metadata.name,
+            versions = ?selected_pod_versions,
+            "Selects Pod versions",
+        );
+
+        let dr = DestinationRule {
+            metadata: ObjectMeta {
+                name: svc.metadata.name.clone(),
+                namespace: svc.metadata.namespace.clone(),
+                ..ObjectMeta::default()
+            },
+            spec: DestinationRuleSpec {
+                host: Some(fqdn.clone()),
+                subsets: Some(
+                    selected_pod_versions
+                        .iter()
+                        .map(|v| DestinationRuleSubsets {
+                            name: Some(v.clone()),
+                            labels: Some(btreemap![
+                              "version".to_owned() => v.clone(),
+                            ]),
+                            ..DestinationRuleSubsets::default()
+                        })
+                        .collect::<Vec<DestinationRuleSubsets>>(),
+                ),
+                ..DestinationRuleSpec::default()
+            },
+        };
+        let dry = serde_yaml::to_string(&dr)?;
+        println!("{}", dry);
+
+        let vs = VirtualService {
+            metadata: ObjectMeta {
+                name: svc
+                    .metadata
+                    .name
+                    .clone()
+                    .map(|n| format!("{}-overrides", n)),
+                namespace: svc.metadata.namespace.clone(),
+                ..ObjectMeta::default()
+            },
+            spec: VirtualServiceSpec {
+                // gateways: implicity "mesh"
+                hosts: Some(vec![fqdn.clone()]),
+                http: Some(
+                    vec![selected_pod_versions.iter().map(|v| {
+                    VirtualServiceHttp {
+                        r#match: Some(vec![VirtualServiceHttpMatch {
+                            headers: Some(btreemap![
+                                         "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
+                                             exact: Some(format!("{}:{}", svc.metadata.name.as_ref().unwrap(), v)),
+                                             prefix: None,
+                                             regex: None,
+                                         },
+                            ]),
+                            ..VirtualServiceHttpMatch::default()
+                        }]),
+                        route: Some(vec![VirtualServiceHttpRoute {
+                            destination: Some(VirtualServiceHttpRouteDestination {
+                                host: Some(fqdn.clone()),
+                                port: None,
+                                subset: Some(v.clone()),
+                            }),
+                            ..VirtualServiceHttpRoute::default()
+                        }]),
+                        ..VirtualServiceHttp::default()
+                    }
+                    }).collect::<Vec<VirtualServiceHttp>>(), vec![
+                    // Default route: to v1
+                    VirtualServiceHttp {
+                        route: Some(vec![VirtualServiceHttpRoute {
+                            destination: Some(VirtualServiceHttpRouteDestination {
+                                host: Some(fqdn.clone()),
+                                port: None,
+                                subset: Some("v1".to_owned()),
+                            }),
+                            ..VirtualServiceHttpRoute::default()
+                        }]),
+                        ..VirtualServiceHttp::default()
+                    }
+                    ]].concat()
+                ),
+                ..VirtualServiceSpec::default()
+            },
+        };
+        let vsy = serde_yaml::to_string(&vs)?;
+        println!("{}", vsy);
     }
     // for dr in drs.list(&Default::default()).await? {
     //     debug!(event = "Found DR", ?dr.metadata.name, ?dr.metadata.namespace);
@@ -42,25 +194,13 @@ async fn main() -> anyhow::Result<()> {
     //     debug!(event = "Found VS", ?vs.metadata.name, ?vs.metadata.namespace);
     // }
 
-    let dr = DestinationRule {
-        metadata: ObjectMeta {
-            name: Some("foo".to_owned()),
-            ..ObjectMeta::default()
-        },
-        spec: DestinationRuleSpec {
-            host: Some("foo".to_owned()),
-            subsets: Some(vec![DestinationRuleSubsets {
-                name: Some("v1".to_owned()),
-                labels: Some(btreemap![
-                  "version".to_owned() => "v1".to_owned(),
-                ]),
-                ..DestinationRuleSubsets::default()
-            }]),
-            ..DestinationRuleSpec::default()
-        },
-    };
-
-    println!("{:?}", dr);
+    // TODO:
+    // - do the pods AND deps I'm making have the app&version labels on them?
+    // - generate from deps (make funcs that can be called from an operator), write out
+    //   - "algo": get services, get deps filtered by their selectors (is a fn for this?), use svc host + dev version labels
+    // - VS too
+    // - separate binary entry points
+    // - operator
 
     Ok(())
 }
