@@ -11,15 +11,23 @@ use kube::{
 };
 use maplit::btreemap;
 use std::collections::BTreeMap;
+use std::fmt;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
-// TODO: make the Display / Format impl
-fn selectorMap2Str(sel: &BTreeMap<String, String>) -> String {
-    sel.iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect::<Vec<String>>()
-        .join(",")
+struct Selector<'a>(&'a BTreeMap<String, String>);
+
+impl fmt::Display for Selector<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(
+            &self
+                .0
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<String>>()
+                .join(","),
+        )
+    }
 }
 
 #[tokio::main]
@@ -65,9 +73,9 @@ async fn main() -> anyhow::Result<()> {
         trace!(svc.metadata.name, svc.metadata.namespace, fqdn, "Found SVC");
 
         let selected_pods = pods_api
-            .list(&ListParams::default().labels(&selectorMap2Str(
-                &(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()),
-            )))
+            .list(&ListParams::default().labels(
+                &Selector(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()).to_string(), // to_string invokes Display::fmt()
+            ))
             .await?;
 
         for pod in &selected_pods {
