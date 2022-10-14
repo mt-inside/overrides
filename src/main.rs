@@ -51,7 +51,12 @@ async fn main() -> anyhow::Result<()> {
     debug!("Connecting...");
     let client = Client::try_default().await?;
     // TODO: cluster info
-    debug!("Connected");
+    let ver = client.apiserver_version().await?;
+    debug!(
+        version = ver.git_version,
+        platform = ver.platform,
+        "Connected"
+    );
 
     let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
