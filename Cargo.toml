@@ -11,14 +11,21 @@ default-run = "override-generator"
 anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
-tracing-subscriber = {version="0.3", features=["std", "registry", "env-filter"]}
+tracing-subscriber = {version="0.3", features=["std", "registry", "json", "env-filter"]}
 kube = { version = "0.75", features = ["client", "runtime", "derive"] }
 k8s-openapi = { version = "0.16", features = ["v1_25"] }
 tokio = { version = "1.21", features = ["full"] }
 futures = "0.3"
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-schemars = { version = "0.8" }
+schemars = { version = "0.8", features = ["chrono"] }
 maplit = "1.0"
 clap = { version = "4.0.15", features = ["derive"] }
+# actix-web = "4.2.1"
+# prometheus = "0.13.2"
+# chrono = { version = "0.4.22", features = ["serde"] }
+# tracing-opentelemetry = "0.18.0"
+# opentelemetry = { version = "0.18.0", features = ["trace", "rt-tokio"] }
+# opentelemetry-otlp = { version = "0.11.0", features = ["tokio"], optional = true }
+# tonic = { version = "0.8.1", optional = true }
