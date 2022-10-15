@@ -23,3 +23,12 @@ generate:
 	# Last document is empty, because of a trailing ---
 	#for (( i=0; i<${no_docs}-1; i++ ))
 		#curl -sSL https://raw.githubusercontent.com/istio/istio/master/manifests/charts/base/crds/crd-all.gen.yaml | yq eval 'select(di == '${i}')' | kopium -Af - > istio-$i.rs
+
+lint:
+	cargo clippy -- -D warnings # warn=>err
+
+build: lint
+	cargo build
+
+run: lint
+	cargo run
