@@ -164,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
     // TODO:
     // - separate binary entry points
     // - operator
+    // - build into container and run in cluster
 
     Ok(())
 }
