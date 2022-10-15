@@ -162,10 +162,6 @@ async fn main() -> anyhow::Result<()> {
     // }
 
     // TODO:
-    // - do the pods AND deps I'm making have the app&version labels on them?
-    // - generate from deps (make funcs that can be called from an operator), write out
-    //   - "algo": get services, get deps filtered by their selectors (is a fn for this?), use svc host + dev version labels
-    // - VS too
     // - separate binary entry points
     // - operator
 
