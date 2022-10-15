@@ -1,9 +1,22 @@
+use clap::Parser;
 use kube::Client;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
+#[derive(Parser, Debug)]
+#[command(author = "Matt Turner", about = "Generates Istio config for service-chain overrides", version, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    kubeconfig: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+    if args.kubeconfig.is_some() {
+        panic!("Don't support alternate kubeconfig location yet");
+    };
+
     //tracing_subscriber::fmt()
     //    .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="override_operator=off|error|warn|info|debug|trace"
     //    //.with_max_level(Level::TRACE)
