@@ -105,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
         };
         let dry = serde_yaml::to_string(&dr)?;
         println!("{}", dry);
+        println!("---"); // hack
 
         let vs = VirtualService {
             metadata: ObjectMeta { name: svc.metadata.name.clone().map(|n| format!("{}-overrides", n)), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() },
@@ -151,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
         };
         let vsy = serde_yaml::to_string(&vs)?;
         println!("{}", vsy);
+        println!("---"); // hack
     }
     // for dr in drs.list(&Default::default()).await? {
     //     debug!(event = "Found DR", ?dr.metadata.name, ?dr.metadata.namespace);
