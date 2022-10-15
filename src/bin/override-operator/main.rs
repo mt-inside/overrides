@@ -6,8 +6,8 @@ use kube::{
     runtime::controller::{Action, Controller},
     Client,
 };
-use override_operator::istio::destinationrules_networking_istio_io::DestinationRule;
-use override_operator::istio::virtualservices_networking_istio_io::VirtualService;
+use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
+use overrides::istio::virtualservices_networking_istio_io::VirtualService;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::time::Duration;
@@ -21,7 +21,7 @@ enum Error {
     #[error("MissingObjectKey: {0}")]
     MissingObjectKey(&'static str),
     #[error("Failed to create resource: {0}")]
-    GenerationError(#[source] override_operator::Error),
+    GenerationError(#[source] overrides::Error),
 }
 
 // TODO:
@@ -35,7 +35,7 @@ struct Data {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
-        .with(filter::Targets::new().with_target("override_operator", Level::TRACE).with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
+        .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
                 .pretty()
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let client = override_operator::get_k8s_client().await?;
+    let client = overrides::get_k8s_client().await?;
 
     let svc_api: Api<Service> = Api::default_namespaced(client.clone());
     let dr_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
@@ -79,14 +79,14 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
     let oref = svc.controller_owner_ref(&()).unwrap();
     let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), owner_references: Some(vec![oref.clone()]), ..ObjectMeta::default() };
 
-    let versions = override_operator::svc_versions(client, &svc).await.map_err(Error::GenerationError)?;
+    let versions = overrides::svc_versions(client, &svc).await.map_err(Error::GenerationError)?;
     info!(
         service = svc.metadata.name,
         versions = ?versions,
         "Selects Pod versions",
     );
-    let dr = override_operator::dr_for_versions(&svc, &versions, meta.clone());
-    let vs = override_operator::vs_for_versions(&svc, &versions, meta.clone());
+    let dr = overrides::dr_for_versions(&svc, &versions, meta.clone());
+    let vs = overrides::vs_for_versions(&svc, &versions, meta.clone());
 
     let dr_api: Api<DestinationRule> = Api::namespaced(client.clone(), svc_ns);
     let vs_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);

@@ -1,8 +1,8 @@
 use clap::Parser;
 use k8s_openapi::api::core::v1::Service;
 use kube::{api::Api, api::ObjectMeta};
-use override_operator::istio::destinationrules_networking_istio_io::DestinationRule;
-use override_operator::istio::virtualservices_networking_istio_io::VirtualService;
+use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
+use overrides::istio::virtualservices_networking_istio_io::VirtualService;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
@@ -21,8 +21,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tracing_subscriber::registry()
-        //.with(filter::EnvFilter::from_default_env()) // set env RUST_LOG="override_operator=off|error|warn|info|debug|trace"
-        .with(filter::Targets::new().with_target("override_operator", Level::TRACE).with_target("override_generator", Level::TRACE)) //off|error|warn|info|debug|trace
+        //.with(filter::EnvFilter::from_default_env()) // set env RUST_LOG="overrides=off|error|warn|info|debug|trace"
+        .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_generator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
                 .pretty()
@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let client = override_operator::get_k8s_client().await?;
+    let client = overrides::get_k8s_client().await?;
 
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
     let mut drs: Vec<DestinationRule> = vec![];
@@ -45,14 +45,14 @@ async fn main() -> anyhow::Result<()> {
     {
         let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() };
 
-        let versions = override_operator::svc_versions(&client, &svc).await?;
+        let versions = overrides::svc_versions(&client, &svc).await?;
         info!(
             service = svc.metadata.name,
             versions = ?versions,
             "Selects Pod versions",
         );
-        let dr = override_operator::dr_for_versions(&svc, &versions, meta.clone());
-        let vs = override_operator::vs_for_versions(&svc, &versions, meta.clone());
+        let dr = overrides::dr_for_versions(&svc, &versions, meta.clone());
+        let vs = overrides::vs_for_versions(&svc, &versions, meta.clone());
         drs.push(dr);
         vss.push(vs);
     }
