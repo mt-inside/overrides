@@ -1,5 +1,8 @@
 use clap::Parser;
-use kube::Client;
+use k8s_openapi::api::core::v1::Service;
+use kube::{api::Api, api::ObjectMeta, Client};
+use override_operator::istio::destinationrules_networking_istio_io::DestinationRule;
+use override_operator::istio::virtualservices_networking_istio_io::VirtualService;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
@@ -24,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     //    .init();
 
     tracing_subscriber::registry()
-        .with(filter::Targets::new().with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
+        .with(filter::Targets::new().with_target("override_operator", Level::TRACE).with_target("override_generator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
                 .pretty()
@@ -38,7 +41,30 @@ async fn main() -> anyhow::Result<()> {
     let ver = client.apiserver_version().await?;
     debug!(version = ver.git_version, platform = ver.platform, "Connected");
 
-    let (drs, vss) = override_operator::generate(client).await?;
+    // TODO: map through generate, for_each print and ---
+    let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
+    let mut drs: Vec<DestinationRule> = vec![];
+    let mut vss: Vec<VirtualService> = vec![];
+    for svc in svcs_api
+        .list(&Default::default())
+        .await?
+        .into_iter()
+        // Only services with selectors, eg not "kubernetes"
+        .filter(|s| s.spec.as_ref().unwrap().selector.is_some())
+    {
+        let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() };
+
+        let versions = override_operator::svc_versions(&client, &svc).await?;
+        info!(
+            service = svc.metadata.name,
+            versions = ?versions,
+            "Selects Pod versions",
+        );
+        let dr = override_operator::dr_for_versions(&svc, &versions, meta.clone());
+        let vs = override_operator::vs_for_versions(&svc, &versions, meta.clone());
+        drs.push(dr);
+        vss.push(vs);
+    }
 
     for dr in drs {
         let dry = serde_yaml::to_string(&dr)?;
@@ -51,18 +77,6 @@ async fn main() -> anyhow::Result<()> {
         println!("{}", vsy);
         println!("---"); // hack
     }
-
-    // for dr in drs.list(&Default::default()).await? {
-    //     debug!(event = "Found DR", ?dr.metadata.name, ?dr.metadata.namespace);
-    // }
-    // for vs in vss.list(&Default::default()).await? {
-    //     debug!(event = "Found VS", ?vs.metadata.name, ?vs.metadata.namespace);
-    // }
-
-    // TODO:
-    // - separate binary entry points
-    // - operator
-    // - build into container and run in cluster
 
     Ok(())
 }

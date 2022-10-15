@@ -1,4 +1,4 @@
-mod istio;
+pub mod istio;
 
 extern crate maplit;
 
@@ -12,6 +12,7 @@ use kube::{
 use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::fmt;
+use thiserror::Error;
 use tracing::*;
 
 struct Selector<'a>(&'a BTreeMap<String, String>);
@@ -22,114 +23,108 @@ impl fmt::Display for Selector<'_> {
     }
 }
 
-// TODO: anyhow -> thiserror
-pub async fn generate(client: Client) -> anyhow::Result<(Vec<DestinationRule>, Vec<VirtualService>)> {
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Failed to list resources: {0}")]
+    ListResourcesFailed(#[source] kube::Error),
+}
+
+// TODO: factor into: svc2versinos, versions2dr, versions2vs
+pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>, Error> {
     let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
-    let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
-    // let drs: Api<DestinationRule> = Api::all(client.clone());
-    // let vss: Api<VirtualService> = Api::all(client.clone());
 
-    let mut drs: Vec<DestinationRule> = vec![];
-    let mut vss: Vec<VirtualService> = vec![];
+    trace!(svc.metadata.name, svc.metadata.namespace, "Found SVC");
 
-    for svc in svcs_api
-        .list(&Default::default())
-        .await?
-        .into_iter()
-        // Only services with selectors, eg not "kubernetes"
-        .filter(|s| s.spec.as_ref().unwrap().selector.is_some())
-    {
-        let fqdn = format!(
-            "{}.{}.svc.cluster.local", // TODO: better way to get this?
-            svc.metadata.name.clone().unwrap(),
-            svc.metadata.namespace.clone().unwrap(),
-        );
-        trace!(svc.metadata.name, svc.metadata.namespace, fqdn, "Found SVC");
+    let selected_pods = pods_api
+        .list(&ListParams::default().labels(
+            &Selector(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()).to_string(), // to_string invokes Display::fmt()
+        ))
+        .await
+        .map_err(Error::ListResourcesFailed)?;
 
-        let selected_pods = pods_api
-            .list(&ListParams::default().labels(
-                &Selector(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()).to_string(), // to_string invokes Display::fmt()
-            ))
-            .await?;
-
-        for pod in &selected_pods {
-            trace!(pod.metadata.name, pod.metadata.namespace, version = pod.metadata.labels.as_ref().unwrap().get("version").unwrap(), "Selected Pod",);
-        }
-
-        let selected_pod_versions: Vec<String> = selected_pods.iter().map(|p| p.metadata.labels.as_ref().unwrap().get("version").unwrap().clone()).collect();
-
-        info!(
-            service = svc.metadata.name,
-            versions = ?selected_pod_versions,
-            "Selects Pod versions",
-        );
-
-        let dr = DestinationRule {
-            metadata: ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() },
-            spec: DestinationRuleSpec {
-                host: Some(fqdn.clone()),
-                subsets: Some(
-                    selected_pod_versions
-                        .iter()
-                        .map(|v| DestinationRuleSubsets {
-                            name: Some(v.clone()),
-                            labels: Some(btreemap![
-                              "version".to_owned() => v.clone(),
-                            ]),
-                            ..DestinationRuleSubsets::default()
-                        })
-                        .collect::<Vec<DestinationRuleSubsets>>(),
-                ),
-                ..DestinationRuleSpec::default()
-            },
-        };
-        drs.push(dr);
-
-        let vs = VirtualService {
-            metadata: ObjectMeta { name: svc.metadata.name.clone().map(|n| format!("{}-overrides", n)), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() },
-            spec: VirtualServiceSpec {
-                // gateways: implicity "mesh"
-                hosts: Some(vec![fqdn.clone()]),
-                http: Some(
-                    vec![
-                        selected_pod_versions
-                            .iter()
-                            .map(|v| VirtualServiceHttp {
-                                r#match: Some(vec![VirtualServiceHttpMatch {
-                                    headers: Some(btreemap![
-                                                 "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
-                                                     exact: Some(format!("{}:{}", svc.metadata.name.as_ref().unwrap(), v)),
-                                                     prefix: None,
-                                                     regex: None,
-                                                 },
-                                    ]),
-                                    ..VirtualServiceHttpMatch::default()
-                                }]),
-                                route: Some(vec![VirtualServiceHttpRoute {
-                                    destination: Some(VirtualServiceHttpRouteDestination { host: Some(fqdn.clone()), port: None, subset: Some(v.clone()) }),
-                                    ..VirtualServiceHttpRoute::default()
-                                }]),
-                                ..VirtualServiceHttp::default()
-                            })
-                            .collect::<Vec<VirtualServiceHttp>>(),
-                        vec![
-                            // Default route: to v1
-                            VirtualServiceHttp {
-                                route: Some(vec![VirtualServiceHttpRoute {
-                                    destination: Some(VirtualServiceHttpRouteDestination { host: Some(fqdn.clone()), port: None, subset: Some("v1".to_owned()) }),
-                                    ..VirtualServiceHttpRoute::default()
-                                }]),
-                                ..VirtualServiceHttp::default()
-                            },
-                        ],
-                    ]
-                    .concat(),
-                ),
-                ..VirtualServiceSpec::default()
-            },
-        };
-        vss.push(vs);
+    for pod in &selected_pods {
+        trace!(pod.metadata.name, pod.metadata.namespace, version = pod.metadata.labels.as_ref().unwrap().get("version").unwrap(), "Selected Pod",);
     }
 
-    Ok((drs, vss))
+    Ok(selected_pods.iter().map(|p| p.metadata.labels.as_ref().unwrap().get("version").unwrap().clone()).collect::<Vec<String>>())
+}
+
+pub fn dr_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) -> DestinationRule {
+    let host_fqdn = format!(
+        "{}.{}.svc.cluster.local", // TODO: better way to get this?
+        svc.metadata.name.clone().unwrap(),
+        svc.metadata.namespace.clone().unwrap(),
+    );
+
+    DestinationRule {
+        metadata: meta,
+        spec: DestinationRuleSpec {
+            host: Some(host_fqdn.clone()),
+            subsets: Some(
+                versions
+                    .iter()
+                    .map(|v| DestinationRuleSubsets {
+                        name: Some(v.clone()),
+                        labels: Some(btreemap![
+                          "version".to_owned() => v.clone(),
+                        ]),
+                        ..DestinationRuleSubsets::default()
+                    })
+                    .collect::<Vec<DestinationRuleSubsets>>(),
+            ),
+            ..DestinationRuleSpec::default()
+        },
+    }
+}
+
+pub fn vs_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) -> VirtualService {
+    let host_fqdn = format!(
+        "{}.{}.svc.cluster.local", // TODO: better way to get this?
+        svc.metadata.name.clone().unwrap(),
+        svc.metadata.namespace.clone().unwrap(),
+    );
+
+    VirtualService {
+        metadata: meta,
+        spec: VirtualServiceSpec {
+            // gateways: implicity "mesh"
+            hosts: Some(vec![host_fqdn.clone()]),
+            http: Some(
+                vec![
+                    versions
+                        .iter()
+                        .map(|v| VirtualServiceHttp {
+                            r#match: Some(vec![VirtualServiceHttpMatch {
+                                headers: Some(btreemap![
+                                             "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
+                                                 exact: Some(format!("{}:{}", svc.metadata.name.as_ref().unwrap(), v)),
+                                                 prefix: None,
+                                                 regex: None,
+                                             },
+                                ]),
+                                ..VirtualServiceHttpMatch::default()
+                            }]),
+                            route: Some(vec![VirtualServiceHttpRoute {
+                                destination: Some(VirtualServiceHttpRouteDestination { host: Some(host_fqdn.clone()), port: None, subset: Some(v.clone()) }),
+                                ..VirtualServiceHttpRoute::default()
+                            }]),
+                            ..VirtualServiceHttp::default()
+                        })
+                        .collect::<Vec<VirtualServiceHttp>>(),
+                    vec![
+                        // Default route: to v1
+                        VirtualServiceHttp {
+                            route: Some(vec![VirtualServiceHttpRoute {
+                                destination: Some(VirtualServiceHttpRouteDestination { host: Some(host_fqdn.clone()), port: None, subset: Some("v1".to_owned()) }),
+                                ..VirtualServiceHttpRoute::default()
+                            }]),
+                            ..VirtualServiceHttp::default()
+                        },
+                    ],
+                ]
+                .concat(),
+            ),
+            ..VirtualServiceSpec::default()
+        },
+    }
 }
