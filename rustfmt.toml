@@ -1,0 +1,16 @@
+binop_separator = "Back"
+control_flow = "Visual"
+combine_control_expr = false
+edition = "2021"
+fn_single_line = true
+format_strings = true
+match_block_trailing_comma = true
+imports_granularity = "Crate"
+reorder_impl_items = true
+group_imports = "StdExternalCrate"
+
+max_width = 200
+use_small_heuristics = "Max"
+enum_discrim_align_threshold = 20
+struct_field_align_threshold = 20
+inline_attribute_width = 200
