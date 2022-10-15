@@ -26,13 +26,13 @@ impl fmt::Display for Selector<'_> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     //tracing_subscriber::fmt()
-    //    .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="override_operator2=off|error|warn|info|debug|trace"
+    //    .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="override_operator=off|error|warn|info|debug|trace"
     //    //.with_max_level(Level::TRACE)
     //    .event_format(tracing_subscriber::fmt::format().pretty()) // pretty -> json
     //    .init();
 
     tracing_subscriber::registry()
-        .with(filter::Targets::new().with_target("override_operator2", Level::TRACE)) //off|error|warn|info|debug|trace
+        .with(filter::Targets::new().with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
                 .pretty()
