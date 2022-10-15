@@ -25,8 +25,19 @@ impl fmt::Display for Selector<'_> {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("Failed to connect to cluster: {0}")]
+    ConnectFailed(#[source] kube::Error),
     #[error("Failed to list resources: {0}")]
     ListResourcesFailed(#[source] kube::Error),
+}
+
+pub async fn get_k8s_client() -> Result<Client, Error> {
+    debug!("Connecting...");
+    let client = Client::try_default().await.map_err(Error::ConnectFailed)?;
+    let ver = client.apiserver_version().await.map_err(Error::ConnectFailed)?;
+    debug!(version = ver.git_version, platform = ver.platform, "Connected");
+
+    Ok(client)
 }
 
 // TODO: factor into: svc2versinos, versions2dr, versions2vs

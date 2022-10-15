@@ -29,7 +29,6 @@ enum Error {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // TODO: factor
     tracing_subscriber::registry()
         .with(filter::Targets::new().with_target("override_operator", Level::TRACE).with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
@@ -40,11 +39,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    // TODO: factor
-    debug!("Connecting...");
-    let client = Client::try_default().await?;
-    let ver = client.apiserver_version().await?;
-    debug!(version = ver.git_version, platform = ver.platform, "Connected");
+    let client = override_operator::get_k8s_client().await?;
 
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
     let drs_api: Api<DestinationRule> = Api::default_namespaced(client.clone());

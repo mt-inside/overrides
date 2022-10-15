@@ -1,6 +1,6 @@
 use clap::Parser;
 use k8s_openapi::api::core::v1::Service;
-use kube::{api::Api, api::ObjectMeta, Client};
+use kube::{api::Api, api::ObjectMeta};
 use override_operator::istio::destinationrules_networking_istio_io::DestinationRule;
 use override_operator::istio::virtualservices_networking_istio_io::VirtualService;
 use tracing::*;
@@ -20,13 +20,8 @@ async fn main() -> anyhow::Result<()> {
         panic!("Don't support alternate kubeconfig location yet");
     };
 
-    //tracing_subscriber::fmt()
-    //    .with_env_filter(EnvFilter::from_default_env()) // set env RUST_LOG="override_operator=off|error|warn|info|debug|trace"
-    //    //.with_max_level(Level::TRACE)
-    //    .event_format(tracing_subscriber::fmt::format().pretty()) // pretty -> json
-    //    .init();
-
     tracing_subscriber::registry()
+        //.with(filter::EnvFilter::from_default_env()) // set env RUST_LOG="override_operator=off|error|warn|info|debug|trace"
         .with(filter::Targets::new().with_target("override_operator", Level::TRACE).with_target("override_generator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
@@ -36,10 +31,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    debug!("Connecting...");
-    let client = Client::try_default().await?;
-    let ver = client.apiserver_version().await?;
-    debug!(version = ver.git_version, platform = ver.platform, "Connected");
+    let client = override_operator::get_k8s_client().await?;
 
     // TODO: map through generate, for_each print and ---
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
