@@ -40,7 +40,6 @@ pub async fn get_k8s_client() -> Result<Client, Error> {
     Ok(client)
 }
 
-// TODO: factor into: svc2versinos, versions2dr, versions2vs
 pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>, Error> {
     let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
 

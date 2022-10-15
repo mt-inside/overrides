@@ -27,6 +27,11 @@ enum Error {
 // TODO:
 // - build into container and run in cluster
 
+// Data we want access to in error/reconcile calls
+struct Data {
+    client: Client,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
@@ -41,13 +46,13 @@ async fn main() -> anyhow::Result<()> {
 
     let client = override_operator::get_k8s_client().await?;
 
-    let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
-    let drs_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
-    let vss_api: Api<VirtualService> = Api::default_namespaced(client.clone());
+    let svc_api: Api<Service> = Api::default_namespaced(client.clone());
+    let dr_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
+    let vs_api: Api<VirtualService> = Api::default_namespaced(client.clone());
 
-    Controller::new(svcs_api, ListParams::default())
-        .owns(drs_api, ListParams::default())
-        .owns(vss_api, ListParams::default())
+    Controller::new(svc_api, ListParams::default())
+        .owns(dr_api, ListParams::default())
+        .owns(vs_api, ListParams::default())
         .shutdown_on_signal()
         .run(reconcile, error_policy, Arc::new(Data { client }))
         .for_each(|res| async move {
@@ -68,9 +73,9 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
         return Ok(Action::await_change());
     }
 
-    let svc_ns = svc.metadata.namespace.as_ref().ok_or_else(|| Error::MissingObjectKey(".metadata.namespace"))?;
     let client = &ctx.client;
 
+    let svc_ns = svc.metadata.namespace.as_ref().ok_or_else(|| Error::MissingObjectKey(".metadata.namespace"))?;
     let oref = svc.controller_owner_ref(&()).unwrap();
     let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), owner_references: Some(vec![oref.clone()]), ..ObjectMeta::default() };
 
@@ -83,13 +88,12 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
     let dr = override_operator::dr_for_versions(&svc, &versions, meta.clone());
     let vs = override_operator::vs_for_versions(&svc, &versions, meta.clone());
 
-    // TODO: pass in ctx
-    let drs_api: Api<DestinationRule> = Api::namespaced(client.clone(), svc_ns);
-    let vss_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);
+    let dr_api: Api<DestinationRule> = Api::namespaced(client.clone(), svc_ns);
+    let vs_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);
 
     // Server-side apply
-    drs_api.patch(dr.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&dr)).await.map_err(Error::ResourceCreationFailed)?;
-    vss_api.patch(vs.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&vs)).await.map_err(Error::ResourceCreationFailed)?;
+    dr_api.patch(dr.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&dr)).await.map_err(Error::ResourceCreationFailed)?;
+    vs_api.patch(vs.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&vs)).await.map_err(Error::ResourceCreationFailed)?;
 
     Ok(Action::requeue(Duration::from_secs(300)))
 }
@@ -97,9 +101,4 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
 // The controller triggers this on reconcile errors
 fn error_policy(_object: Arc<Service>, _error: &Error, _ctx: Arc<Data>) -> Action {
     Action::requeue(Duration::from_secs(1))
-}
-
-// Data we want access to in error/reconcile calls
-struct Data {
-    client: Client,
 }

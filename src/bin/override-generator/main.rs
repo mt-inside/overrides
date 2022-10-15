@@ -33,7 +33,6 @@ async fn main() -> anyhow::Result<()> {
 
     let client = override_operator::get_k8s_client().await?;
 
-    // TODO: map through generate, for_each print and ---
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
     let mut drs: Vec<DestinationRule> = vec![];
     let mut vss: Vec<VirtualService> = vec![];
