@@ -1,7 +1,9 @@
 [package]
 name = "override-operator"
 version = "0.1.0"
+authors = ["Matt Turner"]
 edition = "2021"
+default-run = "override-generator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
