@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .for_each(|res| async move {
             match res {
                 Ok(o) => info!("reconciled {:?}", o),
-                Err(e) => warn!("reconcile failed: {}", e),
+                Err(e) => warn!("reconcile failed: {:?}", e),
             }
         })
         .await;
