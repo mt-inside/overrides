@@ -70,7 +70,7 @@ pub fn dr_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
     DestinationRule {
         metadata: ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), owner_references: oref.map(|or| vec![or]), ..ObjectMeta::default() },
         spec: DestinationRuleSpec {
-            host: Some(host_fqdn.clone()),
+            host: Some(host_fqdn),
             subsets: Some(
                 versions
                     .iter()
@@ -131,7 +131,7 @@ pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
                         // Default route: to v1
                         VirtualServiceHttp {
                             route: Some(vec![VirtualServiceHttpRoute {
-                                destination: Some(VirtualServiceHttpRouteDestination { host: Some(host_fqdn.clone()), port: None, subset: Some("v1".to_owned()) }),
+                                destination: Some(VirtualServiceHttpRouteDestination { host: Some(host_fqdn), port: None, subset: Some("v1".to_owned()) }),
                                 ..VirtualServiceHttpRoute::default()
                             }]),
                             ..VirtualServiceHttp::default()

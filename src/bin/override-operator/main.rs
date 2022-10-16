@@ -21,7 +21,7 @@ enum Error {
     #[error("MissingObjectKey: {0}")]
     MissingObjectKey(&'static str),
     #[error("Failed to create resource: {0}")]
-    GenerationError(#[source] overrides::Error),
+    GenerationFailed(#[source] overrides::Error),
 }
 
 // TODO:
@@ -75,10 +75,10 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
 
     let client = &ctx.client;
 
-    let svc_ns = svc.metadata.namespace.as_ref().ok_or_else(|| Error::MissingObjectKey(".metadata.namespace"))?;
+    let svc_ns = svc.metadata.namespace.as_ref().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
     let oref = svc.controller_owner_ref(&()).unwrap();
 
-    let versions = overrides::svc_versions(client, &svc).await.map_err(Error::GenerationError)?;
+    let versions = overrides::svc_versions(client, &svc).await.map_err(Error::GenerationFailed)?;
     info!(
         service = svc.metadata.name,
         versions = ?versions,
