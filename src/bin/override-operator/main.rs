@@ -2,7 +2,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::{
-    api::{Api, ListParams, ObjectMeta, Patch, PatchParams, Resource},
+    api::{Api, ListParams, Patch, PatchParams, Resource},
     runtime::controller::{Action, Controller},
     Client,
 };
@@ -77,7 +77,6 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
 
     let svc_ns = svc.metadata.namespace.as_ref().ok_or_else(|| Error::MissingObjectKey(".metadata.namespace"))?;
     let oref = svc.controller_owner_ref(&()).unwrap();
-    let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), owner_references: Some(vec![oref.clone()]), ..ObjectMeta::default() };
 
     let versions = overrides::svc_versions(client, &svc).await.map_err(Error::GenerationError)?;
     info!(
@@ -85,8 +84,8 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
         versions = ?versions,
         "Selects Pod versions",
     );
-    let dr = overrides::dr_for_versions(&svc, &versions, meta.clone());
-    let vs = overrides::vs_for_versions(&svc, &versions, meta.clone());
+    let dr = overrides::dr_for_versions(&svc, &versions, Some(oref.clone()));
+    let vs = overrides::vs_for_versions(&svc, &versions, Some(oref.clone()));
 
     let dr_api: Api<DestinationRule> = Api::namespaced(client.clone(), svc_ns);
     let vs_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);

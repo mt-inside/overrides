@@ -1,6 +1,6 @@
 use clap::Parser;
 use k8s_openapi::api::core::v1::Service;
-use kube::{api::Api, api::ObjectMeta};
+use kube::api::Api;
 use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
 use overrides::istio::virtualservices_networking_istio_io::VirtualService;
 use tracing::*;
@@ -43,16 +43,14 @@ async fn main() -> anyhow::Result<()> {
         // Only services with selectors, eg not "kubernetes"
         .filter(|s| s.spec.as_ref().unwrap().selector.is_some())
     {
-        let meta = ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), ..ObjectMeta::default() };
-
         let versions = overrides::svc_versions(&client, &svc).await?;
         info!(
             service = svc.metadata.name,
             versions = ?versions,
             "Selects Pod versions",
         );
-        let dr = overrides::dr_for_versions(&svc, &versions, meta.clone());
-        let vs = overrides::vs_for_versions(&svc, &versions, meta.clone());
+        let dr = overrides::dr_for_versions(&svc, &versions, None);
+        let vs = overrides::vs_for_versions(&svc, &versions, None);
         drs.push(dr);
         vss.push(vs);
     }

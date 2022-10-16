@@ -5,6 +5,7 @@ extern crate maplit;
 use istio::destinationrules_networking_istio_io::*;
 use istio::virtualservices_networking_istio_io::*;
 use k8s_openapi::api::core::v1::{Pod, Service};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::{
     api::{Api, ListParams, ObjectMeta},
     Client,
@@ -59,7 +60,7 @@ pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>,
     Ok(selected_pods.iter().map(|p| p.metadata.labels.as_ref().unwrap().get("version").unwrap().clone()).collect::<Vec<String>>())
 }
 
-pub fn dr_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) -> DestinationRule {
+pub fn dr_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerReference>) -> DestinationRule {
     let host_fqdn = format!(
         "{}.{}.svc.cluster.local", // TODO: better way to get this?
         svc.metadata.name.clone().unwrap(),
@@ -67,7 +68,7 @@ pub fn dr_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) 
     );
 
     DestinationRule {
-        metadata: meta,
+        metadata: ObjectMeta { name: svc.metadata.name.clone(), namespace: svc.metadata.namespace.clone(), owner_references: oref.map(|or| vec![or]), ..ObjectMeta::default() },
         spec: DestinationRuleSpec {
             host: Some(host_fqdn.clone()),
             subsets: Some(
@@ -87,7 +88,7 @@ pub fn dr_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) 
     }
 }
 
-pub fn vs_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) -> VirtualService {
+pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerReference>) -> VirtualService {
     let host_fqdn = format!(
         "{}.{}.svc.cluster.local", // TODO: better way to get this?
         svc.metadata.name.clone().unwrap(),
@@ -95,7 +96,12 @@ pub fn vs_for_versions(svc: &Service, versions: &Vec<String>, meta: ObjectMeta) 
     );
 
     VirtualService {
-        metadata: meta,
+        metadata: ObjectMeta {
+            name: Some(format!("{}-overrides", svc.metadata.name.as_ref().unwrap())),
+            namespace: svc.metadata.namespace.clone(),
+            owner_references: oref.map(|or| vec![or]),
+            ..ObjectMeta::default()
+        },
         spec: VirtualServiceSpec {
             // gateways: implicity "mesh"
             hosts: Some(vec![host_fqdn.clone()]),
