@@ -33,5 +33,8 @@ build: lint
 run: lint
 	cargo run
 
-image: lint
-	docker build . --tag docker.io/mtinside/override-operator:0.0.1 --push --platform linux/arm64,linux/amd64
+image-dev: lint
+	docker build -f Dockerfile.dev . --tag docker.io/mtinside/override-operator:dev --push --platform linux/arm64
+
+image-release: lint
+	docker build -f Dockerfile.release . --tag docker.io/mtinside/override-operator:0.0.1 --push --platform linux/arm64,linux/amd64
