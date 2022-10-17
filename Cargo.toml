@@ -5,6 +5,11 @@ authors = ["Matt Turner"]
 edition = "2021"
 default-run = "override-generator"
 
+[profile.release]
+strip = true
+opt-level = "z"  # Optimize for size.
+lto = true # Link-Time Optimisation, eg dead code removal.
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
