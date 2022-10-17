@@ -113,9 +113,9 @@ pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
                             r#match: Some(vec![VirtualServiceHttpMatch {
                                 headers: Some(btreemap![
                                              "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
-                                                 exact: Some(format!("{}:{}", svc.metadata.name.as_ref().unwrap(), v)),
+                                                 exact: None,
                                                  prefix: None,
-                                                 regex: None,
+                                                 regex: Some(format!(".*{}:{}.*", svc.metadata.name.as_ref().unwrap(), v)),
                                              },
                                 ]),
                                 ..VirtualServiceHttpMatch::default()
