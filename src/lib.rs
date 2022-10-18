@@ -113,7 +113,7 @@ pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
                                     "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
                                         exact: None,
                                         prefix: None,
-                                        regex: Some(format!(".*{}:{}.*", svc.metadata.name.as_ref().unwrap(), v)),
+                                        regex: Some(format!(".*(,|^){}:{}(,|$).*", svc.metadata.name.as_ref().unwrap(), v)),
                                     },
                                 ]),
                                 ..VirtualServiceHttpMatch::default()
