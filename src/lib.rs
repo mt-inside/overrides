@@ -1,7 +1,5 @@
 pub mod istio;
 
-extern crate maplit;
-
 use istio::destinationrules_networking_istio_io::*;
 use istio::virtualservices_networking_istio_io::*;
 use k8s_openapi::api::core::v1::{Pod, Service};
@@ -112,11 +110,11 @@ pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
                         .map(|v| VirtualServiceHttp {
                             r#match: Some(vec![VirtualServiceHttpMatch {
                                 headers: Some(btreemap![
-                                             "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
-                                                 exact: None,
-                                                 prefix: None,
-                                                 regex: Some(format!(".*{}:{}.*", svc.metadata.name.as_ref().unwrap(), v)),
-                                             },
+                                    "x-override".to_owned() => VirtualServiceHttpMatchHeaders{
+                                        exact: None,
+                                        prefix: None,
+                                        regex: Some(format!(".*{}:{}.*", svc.metadata.name.as_ref().unwrap(), v)),
+                                    },
                                 ]),
                                 ..VirtualServiceHttpMatch::default()
                             }]),

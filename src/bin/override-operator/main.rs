@@ -24,9 +24,6 @@ enum Error {
     GenerationFailed(#[source] overrides::Error),
 }
 
-// TODO:
-// - build into container and run in cluster
-
 // Data we want access to in error/reconcile calls
 struct Data {
     client: Client,
