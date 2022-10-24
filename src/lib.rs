@@ -39,7 +39,7 @@ pub async fn get_k8s_client() -> Result<Client, Error> {
     Ok(client)
 }
 
-pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>, Error> {
+pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>, kube::Error> {
     let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
 
     trace!(svc.metadata.name, svc.metadata.namespace, "Found SVC");
@@ -48,8 +48,7 @@ pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>,
         .list(&ListParams::default().labels(
             &Selector(svc.spec.as_ref().unwrap().selector.as_ref().unwrap()).to_string(), // to_string invokes Display::fmt()
         ))
-        .await
-        .map_err(Error::ListResourcesFailed)?;
+        .await?;
 
     for pod in &selected_pods {
         trace!(pod.metadata.name, pod.metadata.namespace, version = pod.metadata.labels.as_ref().unwrap().get("version").unwrap(), "Selected Pod",);

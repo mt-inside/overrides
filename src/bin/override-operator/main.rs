@@ -3,7 +3,10 @@ use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::{
     api::{Api, ListParams, Patch, PatchParams, Resource},
-    runtime::controller::{Action, Controller},
+    runtime::{
+        controller::{Action, Controller},
+        finalizer::{finalizer, Event as FinalizerEvt},
+    },
     Client,
 };
 use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
@@ -14,14 +17,14 @@ use tokio::time::Duration;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
+static SERVICE_FINALIZER_NAME: &str = "overrides.mt165.co.uk/Service";
+
 #[derive(Debug, Error)]
 enum Error {
-    #[error("Failed to create resource: {0}")]
-    ResourceCreationFailed(#[source] kube::Error),
     #[error("MissingObjectKey: {0}")]
     MissingObjectKey(&'static str),
-    #[error("Failed to create resource: {0}")]
-    GenerationFailed(#[source] overrides::Error),
+    #[error("Finalizer Error: {0}")]
+    FinalizerError(#[source] kube::runtime::finalizer::Error<kube::Error>),
 }
 
 // Data we want access to in error/reconcile calls
@@ -65,6 +68,26 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
+    let client = &ctx.client;
+    let svc_ns = svc.metadata.namespace.clone().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
+    let svc_api: Api<Service> = Api::namespaced(client.clone(), &svc_ns);
+    // finalizer()
+    // * wraps the reconcile function (Evt::Apply)
+    // * adds a finalizer ref to the applied objects
+    // * impls the finalizer, which does deletion of owned objects for you
+    //   * then calls Evt::Cleanup which is just for you to log or whatever
+    finalizer(&svc_api, SERVICE_FINALIZER_NAME, svc, |event| async {
+        match event {
+            // TODO: to member functions
+            FinalizerEvt::Apply(svc) => update(svc, ctx.clone(), &svc_ns).await,
+            FinalizerEvt::Cleanup(svc) => delete(svc, ctx.clone(), &svc_ns).await,
+        }
+    })
+    .await
+    .map_err(Error::FinalizerError)
+}
+
+async fn update(svc: Arc<Service>, ctx: Arc<Data>, svc_ns: &str) -> Result<Action, kube::Error> {
     // Skip eg "kubernetes"
     if svc.spec.as_ref().unwrap().selector.is_none() {
         return Ok(Action::await_change());
@@ -72,10 +95,9 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
 
     let client = &ctx.client;
 
-    let svc_ns = svc.metadata.namespace.as_ref().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
     let oref = svc.controller_owner_ref(&()).unwrap();
 
-    let versions = overrides::svc_versions(client, &svc).await.map_err(Error::GenerationFailed)?;
+    let versions = overrides::svc_versions(client, &svc).await?;
     info!(
         service = svc.metadata.name,
         versions = ?versions,
@@ -88,10 +110,16 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
     let vs_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);
 
     // Server-side apply
-    dr_api.patch(dr.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&dr)).await.map_err(Error::ResourceCreationFailed)?;
-    vs_api.patch(vs.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&vs)).await.map_err(Error::ResourceCreationFailed)?;
+    dr_api.patch(dr.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&dr)).await?;
+    vs_api.patch(vs.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&vs)).await?;
 
     Ok(Action::requeue(Duration::from_secs(300)))
+}
+
+async fn delete(svc: Arc<Service>, _ctx: Arc<Data>, _svc_ns: &str) -> Result<Action, kube::Error> {
+    info!(service = svc.metadata.name, "DestinationRule and VirtualService deleted by finalizer",);
+
+    Ok(Action::await_change())
 }
 
 // The controller triggers this on reconcile errors
