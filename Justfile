@@ -1,6 +1,7 @@
 default:
-	@just --list
+	@just --list --unsorted --color=always
 
+# install build dependencies
 install-tools:
 	# Need https://github.com/kube-rs/kopium/issues/87
 	cargo install --git https://github.com/kube-rs/kopium --branch main -- kopium
