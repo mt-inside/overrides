@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::Parser;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::{
@@ -19,6 +20,19 @@ use tracing_subscriber::{filter, prelude::*};
 
 static SERVICE_FINALIZER_NAME: &str = "overrides.mt165.co.uk/Service";
 
+static NAME: &str = env!("CARGO_BIN_NAME");
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Parser, Debug)]
+#[command(name = NAME)]
+#[command(author = "Matt Turner")]
+#[command(version = VERSION)]
+#[command(about = "Generates Istio config for service-chain overrides", long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    kubeconfig: Option<String>,
+}
+
 #[derive(Debug, Error)]
 enum Error {
     #[error("MissingObjectKey: {0}")]
@@ -34,6 +48,11 @@ struct Data {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+    if args.kubeconfig.is_some() {
+        panic!("Don't support alternate kubeconfig location yet");
+    };
+
     tracing_subscriber::registry()
         .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
         .with(
@@ -43,6 +62,8 @@ async fn main() -> anyhow::Result<()> {
                 .with_writer(std::io::stderr),
         )
         .init();
+
+    info!(VERSION, "{}", NAME);
 
     let client = overrides::get_k8s_client().await?;
 

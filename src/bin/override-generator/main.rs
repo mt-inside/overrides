@@ -7,7 +7,10 @@ use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
 #[derive(Parser, Debug)]
-#[command(author = "Matt Turner", about = "Generates Istio config for service-chain overrides", version, long_about = None)]
+#[command(name = env!("CARGO_BIN_NAME"))]
+#[command(author = "Matt Turner")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(about = "Generates Istio config for service-chain overrides", long_about = None)]
 struct Args {
     #[arg(short, long)]
     kubeconfig: Option<String>,

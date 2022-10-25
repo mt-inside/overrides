@@ -1,6 +1,11 @@
 default:
 	@just --list --unsorted --color=always
 
+REPO := "docker.io/mtinside/override-operator"
+TAG := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
+TAGD := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
+ARCHS := "linux/amd64,linux/arm64"#,linux/arm/v7"
+
 # install build dependencies
 install-tools:
 	# Need https://github.com/kube-rs/kopium/issues/87
@@ -35,7 +40,7 @@ run: lint
 	cargo run
 
 image-dev: lint
-	docker build -f Dockerfile.dev . --tag docker.io/mtinside/override-operator:dev --push --platform linux/arm64
+	docker build -f Dockerfile.dev . --tag {{REPO}}:dev --push --platform linux/arm64
 
 image-release: lint
-	docker build -f Dockerfile.release . --tag docker.io/mtinside/override-operator:0.0.1 --push --platform linux/arm64,linux/amd64
+	docker build -f Dockerfile.release . --tag {{REPO}}:{{TAG}} --push --platform {{ARCHS}}
