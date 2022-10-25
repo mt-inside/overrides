@@ -27,8 +27,8 @@ serde_yaml = "0.9"
 schemars = { version = "0.8", features = ["chrono"] }
 maplit = "1.0"
 clap = { version = "4.0.15", features = ["derive"] }
-# actix-web = "4.2.1"
-# prometheus = "0.13.2"
+prometheus = "0.13.2"
+actix-web = "4.2.1"
 # chrono = { version = "0.4.22", features = ["serde"] }
 # tracing-opentelemetry = "0.18.0"
 # opentelemetry = { version = "0.18.0", features = ["trace", "rt-tokio"] }

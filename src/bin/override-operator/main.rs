@@ -1,3 +1,10 @@
+mod metrics;
+
+use actix_web::{
+    get, middleware,
+    web::{self, Data},
+    App, HttpRequest, HttpResponse, HttpServer, Responder,
+};
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
@@ -14,7 +21,7 @@ use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
 use overrides::istio::virtualservices_networking_istio_io::VirtualService;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::time::Duration;
+use tokio::time::{Duration, Instant};
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
@@ -42,8 +49,9 @@ enum Error {
 }
 
 // Data we want access to in error/reconcile calls
-struct Data {
+struct ControllerCtx {
     client: Client,
+    metrics: metrics::Metrics,
 }
 
 #[tokio::main]
@@ -54,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tracing_subscriber::registry()
-        .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_operator", Level::TRACE)) //off|error|warn|info|debug|trace
+        .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_operator", Level::TRACE).with_target("actix_web", Level::DEBUG)) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
                 .pretty()
@@ -65,30 +73,42 @@ async fn main() -> anyhow::Result<()> {
 
     info!(VERSION, "{}", NAME);
 
+    let http_server = HttpServer::new(move || App::new().app_data(Data::new(())).wrap(middleware::Logger::default().exclude("/health")).service(metrics::metrics))
+        .bind("0.0.0.0:8080")
+        .expect("Can't bind to ::8080")
+        .shutdown_timeout(5);
+
     let client = overrides::get_k8s_client().await?;
 
     let svc_api: Api<Service> = Api::default_namespaced(client.clone());
     let dr_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
     let vs_api: Api<VirtualService> = Api::default_namespaced(client.clone());
 
-    Controller::new(svc_api, ListParams::default())
+    let controller = Controller::new(svc_api, ListParams::default())
         .owns(dr_api, ListParams::default())
         .owns(vs_api, ListParams::default())
         .shutdown_on_signal()
-        .run(reconcile, error_policy, Arc::new(Data { client }))
+        .run(reconcile, error_policy, Arc::new(ControllerCtx { client, metrics: metrics::Metrics::new() }))
         .for_each(|res| async move {
             match res {
                 Ok(o) => info!("reconciled {:?}", o),
                 Err(e) => warn!("reconcile failed: {:?}", e),
             }
-        })
-        .await;
+        });
 
-    info!("controller terminiated");
+    tokio::select! {
+        _ = controller => warn!("Controller bailed"),
+        _ = http_server.run() => warn!("Web server bailed"),
+    };
+
+    info!("terminiated");
     Ok(())
 }
 
-async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
+async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action, Error> {
+    ctx.metrics.reconciliations.inc();
+    let start_time = Instant::now();
+
     let client = &ctx.client;
     let svc_ns = svc.metadata.namespace.clone().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
     let svc_api: Api<Service> = Api::namespaced(client.clone(), &svc_ns);
@@ -97,7 +117,7 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
     // * adds a finalizer ref to the applied objects
     // * impls the finalizer, which does deletion of owned objects for you
     //   * then calls Evt::Cleanup which is just for you to log or whatever
-    finalizer(&svc_api, SERVICE_FINALIZER_NAME, svc, |event| async {
+    let action = finalizer(&svc_api, SERVICE_FINALIZER_NAME, svc, |event| async {
         match event {
             // TODO: to member functions
             FinalizerEvt::Apply(svc) => update(svc, ctx.clone(), &svc_ns).await,
@@ -105,10 +125,15 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<Data>) -> Result<Action, Error> {
         }
     })
     .await
-    .map_err(Error::FinalizerError)
+    .map_err(Error::FinalizerError);
+
+    let duration = start_time.elapsed().as_millis() as f64 / 1000.0;
+    ctx.metrics.reconcile_durations.with_label_values(&[]).observe(duration);
+
+    action
 }
 
-async fn update(svc: Arc<Service>, ctx: Arc<Data>, svc_ns: &str) -> Result<Action, kube::Error> {
+async fn update(svc: Arc<Service>, ctx: Arc<ControllerCtx>, svc_ns: &str) -> Result<Action, kube::Error> {
     // Skip eg "kubernetes"
     if svc.spec.as_ref().unwrap().selector.is_none() {
         return Ok(Action::await_change());
@@ -137,13 +162,14 @@ async fn update(svc: Arc<Service>, ctx: Arc<Data>, svc_ns: &str) -> Result<Actio
     Ok(Action::requeue(Duration::from_secs(300)))
 }
 
-async fn delete(svc: Arc<Service>, _ctx: Arc<Data>, _svc_ns: &str) -> Result<Action, kube::Error> {
+async fn delete(svc: Arc<Service>, _ctx: Arc<ControllerCtx>, _svc_ns: &str) -> Result<Action, kube::Error> {
     info!(service = svc.metadata.name, "DestinationRule and VirtualService deleted by finalizer",);
 
     Ok(Action::await_change())
 }
 
 // The controller triggers this on reconcile errors
-fn error_policy(_object: Arc<Service>, _error: &Error, _ctx: Arc<Data>) -> Action {
+fn error_policy(_object: Arc<Service>, _error: &Error, ctx: Arc<ControllerCtx>) -> Action {
+    ctx.metrics.failures.inc();
     Action::requeue(Duration::from_secs(1))
 }
