@@ -9,6 +9,7 @@ use kube::{
     api::{Api, ListParams, Patch, PatchParams, Resource},
     runtime::{
         controller::{Action, Controller},
+        events::{Event, EventType, Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvt},
     },
     Client,
@@ -42,12 +43,15 @@ enum Error {
     MissingObjectKey(&'static str),
     #[error("Finalizer Error: {0}")]
     FinalizerError(#[source] kube::runtime::finalizer::Error<kube::Error>),
+    #[error("Failed to publish event: {0}")]
+    EventPublishFailed(#[source] kube::Error),
 }
 
 // Data we want access to in error/reconcile calls
 struct ControllerCtx {
     client: Client,
     metrics: metrics::Metrics,
+    event_reporter: Reporter,
 }
 
 #[tokio::main]
@@ -80,11 +84,13 @@ async fn main() -> anyhow::Result<()> {
     let dr_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
     let vs_api: Api<VirtualService> = Api::default_namespaced(client.clone());
 
+    let reporter = Reporter { controller: NAME.to_owned(), instance: std::env::var("CONTROLLER_POD_NAME").ok() };
+
     let controller = Controller::new(svc_api, ListParams::default())
         .owns(dr_api, ListParams::default())
         .owns(vs_api, ListParams::default())
         .shutdown_on_signal()
-        .run(reconcile, error_policy, Arc::new(ControllerCtx { client, metrics: metrics::Metrics::new() }))
+        .run(reconcile, error_policy, Arc::new(ControllerCtx { client, metrics: metrics::Metrics::new(), event_reporter: reporter }))
         .for_each(|res| async move {
             match res {
                 Ok(o) => info!("reconciled {:?}", o),
@@ -104,6 +110,18 @@ async fn main() -> anyhow::Result<()> {
 async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action, Error> {
     ctx.metrics.reconciliations.inc();
     let start_time = Instant::now();
+
+    let recorder = Recorder::new(ctx.client.clone(), ctx.event_reporter.clone(), svc.object_ref(&()));
+    recorder
+        .publish(Event {
+            type_: EventType::Normal,
+            reason: "Created Overrides".to_owned(),
+            note: Some("Creating DestinationRule and VirtualService".to_owned()),
+            action: "Creating override resources".to_owned(),
+            secondary: None,
+        })
+        .await
+        .map_err(Error::EventPublishFailed)?;
 
     let client = &ctx.client;
     let svc_ns = svc.metadata.namespace.clone().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
