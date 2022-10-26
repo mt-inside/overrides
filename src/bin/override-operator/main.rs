@@ -71,11 +71,18 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tracing_subscriber::registry()
-        .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_operator", Level::TRACE).with_target("actix_web", Level::DEBUG)) //off|error|warn|info|debug|trace
+        .with(
+            filter::Targets::new()
+                .with_default(Level::INFO)
+                .with_target("overrides", Level::TRACE)
+                .with_target("override_operator", Level::TRACE)
+                .with_target("actix_server", Level::INFO)
+                .with_target("actix_web", Level::DEBUG),
+        ) //off|error|warn|info|debug|trace
         .with(
             tracing_subscriber::fmt::layer()
-                .pretty()
-                .with_file(false) // Don't print events' source file:line
+                //.pretty() - actually ugly
+                //.with_file(false) // Don't print events' source file:line
                 .with_writer(std::io::stderr),
         )
         .init();
@@ -112,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
         _ = http_server.run() => warn!("Web server bailed"),
     };
 
-    info!("terminiated");
+    info!("Terminiated");
     Ok(())
 }
 
