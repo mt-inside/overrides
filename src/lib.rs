@@ -11,7 +11,6 @@ use kube::{
 use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::fmt;
-use thiserror::Error;
 use tracing::*;
 
 struct Selector<'a>(&'a BTreeMap<String, String>);
@@ -22,18 +21,10 @@ impl fmt::Display for Selector<'_> {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Failed to connect to cluster: {0}")]
-    ConnectFailed(#[source] kube::Error),
-    #[error("Failed to list resources: {0}")]
-    ListResourcesFailed(#[source] kube::Error),
-}
-
-pub async fn get_k8s_client() -> Result<Client, Error> {
+pub async fn get_k8s_client() -> Result<Client, kube::Error> {
     debug!("Connecting...");
-    let client = Client::try_default().await.map_err(Error::ConnectFailed)?;
-    let ver = client.apiserver_version().await.map_err(Error::ConnectFailed)?;
+    let client = Client::try_default().await?;
+    let ver = client.apiserver_version().await?;
     debug!(version = ver.git_version, platform = ver.platform, "Connected");
 
     Ok(client)
