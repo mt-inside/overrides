@@ -1,10 +1,6 @@
 mod metrics;
 
-use actix_web::{
-    get, middleware,
-    web::{self, Data},
-    App, HttpRequest, HttpResponse, HttpServer, Responder,
-};
+use actix_web::{middleware, web::Data, App, HttpServer};
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;

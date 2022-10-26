@@ -1,9 +1,5 @@
-use actix_web::{
-    get, middleware,
-    web::{self, Data},
-    App, HttpRequest, HttpResponse, HttpServer, Responder,
-};
-use prometheus::{default_registry, proto::MetricFamily, register_histogram_vec, register_int_counter, Encoder, HistogramVec, IntCounter, TextEncoder};
+use actix_web::{get, HttpRequest, HttpResponse, Responder};
+use prometheus::{default_registry, register_histogram_vec, register_int_counter, Encoder, HistogramVec, IntCounter, TextEncoder};
 
 pub struct Metrics {
     pub reconciliations: IntCounter,
@@ -24,7 +20,7 @@ impl Metrics {
 }
 
 #[get("/metrics")]
-async fn metrics(data: actix_web::web::Data<()>, _req: HttpRequest) -> impl Responder {
+async fn metrics(_data: actix_web::web::Data<()>, _req: HttpRequest) -> impl Responder {
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
     encoder.encode(&default_registry().gather(), &mut buffer).unwrap();
