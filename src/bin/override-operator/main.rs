@@ -1,5 +1,9 @@
 mod metrics;
 
+#[macro_use]
+extern crate maplit;
+
+use actix_web::{get, HttpRequest, HttpResponse, Responder};
 use actix_web::{middleware, web::Data, App, HttpServer};
 use anyhow::Result;
 use clap::Parser;
@@ -54,6 +58,11 @@ struct ControllerCtx {
     event_reporter: Reporter,
 }
 
+#[get("/healthz")]
+async fn health(_data: actix_web::web::Data<()>, _req: HttpRequest) -> impl Responder {
+    HttpResponse::Ok().json(hashmap!["health"=> "ok", "name" => NAME, "version" => VERSION])
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -73,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!(VERSION, "{}", NAME);
 
-    let http_server = HttpServer::new(move || App::new().app_data(Data::new(())).wrap(middleware::Logger::default().exclude("/health")).service(metrics::metrics))
+    let http_server = HttpServer::new(move || App::new().app_data(Data::new(())).wrap(middleware::Logger::default().exclude("/health")).service(metrics::metrics).service(health))
         .bind("0.0.0.0:8080")
         .expect("Can't bind to ::8080")
         .shutdown_timeout(5);
