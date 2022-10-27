@@ -1,3 +1,5 @@
+**NB: This code is alpha and not ready for production use.**
+
 # Overrides
 
 _Overrides_ produces Istio config to enable a request to opt into different versions of Services along a chain.

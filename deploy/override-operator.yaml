@@ -23,7 +23,7 @@ spec:
       serviceAccountName: override-operator
       containers:
       - name: override-operator
-        image: docker.io/mtinside/override-operator:0.0.2
+        image: docker.io/mtinside/override-operator:0.0.3
         imagePullPolicy: Always
 ---
 apiVersion: rbac.authorization.k8s.io/v1
