@@ -31,7 +31,7 @@ pub async fn get_k8s_client() -> Result<Client, kube::Error> {
 }
 
 pub async fn svc_versions(client: &Client, svc: &Service) -> Result<Vec<String>, kube::Error> {
-    let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
+    let pods_api = Api::<Pod>::default_namespaced(client.clone());
 
     trace!(svc.metadata.name, svc.metadata.namespace, "Found SVC");
 

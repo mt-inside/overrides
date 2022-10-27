@@ -40,9 +40,9 @@ struct ControllerCtx {
 pub async fn get_controller() -> Result<impl futures::future::Future, kube::Error> {
     let client = overrides::get_k8s_client().await?;
 
-    let svc_api: Api<Service> = Api::default_namespaced(client.clone());
-    let dr_api: Api<DestinationRule> = Api::default_namespaced(client.clone());
-    let vs_api: Api<VirtualService> = Api::default_namespaced(client.clone());
+    let svc_api = Api::<Service>::default_namespaced(client.clone());
+    let dr_api = Api::<DestinationRule>::default_namespaced(client.clone());
+    let vs_api = Api::<VirtualService>::default_namespaced(client.clone());
 
     let reporter = Reporter { controller: crate::NAME.to_owned(), instance: std::env::var("CONTROLLER_POD_NAME").ok() };
 
@@ -77,7 +77,7 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action,
 
     let client = &ctx.client;
     let svc_ns = svc.metadata.namespace.clone().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
-    let svc_api: Api<Service> = Api::namespaced(client.clone(), &svc_ns);
+    let svc_api = Api::<Service>::namespaced(client.clone(), &svc_ns);
     // finalizer()
     // * wraps the reconcile function (Evt::Apply)
     // * adds a finalizer ref to the applied objects
@@ -118,8 +118,8 @@ async fn update(svc: Arc<Service>, ctx: Arc<ControllerCtx>, svc_ns: &str) -> Res
     let dr = overrides::dr_for_versions(&svc, &versions, Some(oref.clone()));
     let vs = overrides::vs_for_versions(&svc, &versions, Some(oref.clone()));
 
-    let dr_api: Api<DestinationRule> = Api::namespaced(client.clone(), svc_ns);
-    let vs_api: Api<VirtualService> = Api::namespaced(client.clone(), svc_ns);
+    let dr_api = Api::<DestinationRule>::namespaced(client.clone(), svc_ns);
+    let vs_api = Api::<VirtualService>::namespaced(client.clone(), svc_ns);
 
     // Server-side apply
     dr_api.patch(dr.metadata.name.as_ref().unwrap(), &PatchParams::apply("github.com/mt-inside/overrides"), &Patch::Apply(&dr)).await?;
