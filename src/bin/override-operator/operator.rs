@@ -24,7 +24,7 @@ enum Error {
     #[error("MissingObjectKey: {0}")]
     MissingObjectKey(&'static str),
     #[error("Finalizer Error: {0}")]
-    FinalizerError(#[source] kube::runtime::finalizer::Error<kube::Error>),
+    FinalizerFailed(#[source] kube::runtime::finalizer::Error<kube::Error>),
     #[error("Failed to publish event: {0}")]
     EventPublishFailed(#[source] kube::Error),
 }
@@ -91,7 +91,7 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action,
         }
     })
     .await
-    .map_err(Error::FinalizerError);
+    .map_err(Error::FinalizerFailed);
 
     let duration = start_time.elapsed().as_millis() as f64 / 1000.0;
     ctx.metrics.reconcile_durations.with_label_values(&[]).observe(duration);
