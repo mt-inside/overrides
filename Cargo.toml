@@ -1,6 +1,6 @@
 [package]
 name = "overrides"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Matt Turner"]
 edition = "2021"
 default-run = "override-generator"
