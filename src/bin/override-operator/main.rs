@@ -9,7 +9,7 @@ use clap::Parser;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 
-pub static NAME: &str = env!("CARGO_BIN_NAME");
+pub static NAME: &str = env!("CARGO_BIN_NAME"); // has hypens; CARGO_CRATE_NAME for underscores
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser, Debug)]
