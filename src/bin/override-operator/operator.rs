@@ -46,17 +46,25 @@ pub async fn get_controller() -> Result<impl futures::future::Future, kube::Erro
 
     let reporter = Reporter { controller: crate::NAME.to_owned(), instance: std::env::var("CONTROLLER_POD_NAME").ok() };
 
-    Ok(Controller::new(svc_api, ListParams::default())
+    // On types and time:
+    //   .run() returns Stream<Result<ObjectRef, Action>> (stream is like an async iterator)
+    //   - not sure why it returns a Stream<Result> cause stream has an error type
+    //   We don't want to return all the streamed items/actions to main; we want to return to main when the stream finishes, indicating the controller loop quit
+    //   Thus we use for_each, which consumes them, rather than map.
+    //   - our for_each lambda takes _ because it doesn't do anything with the Result<> - we print the Err and Ok branches as we generate them, in error_policy() and reconcile()
+    //   - the lambda returns another future (per item) because that's what for_each wants - it runs that immediately, before calling you again for the next item. We give a Future<()> because the result goes into the void
+    //   - for_each itself returns a Future. Executing that future is what causes it to do work and crunch through the stream. for_each is hard-wired to return Future<()> - that's not the () our lambda gives
+    //   Other options would include
+    //   - fold() the stream to some aggregate of it and return that - num reconciles etc
+    //   - the Errors are reconcile errors, better called Exceptions, which are recoverable and which you don't want to quit for, so we don't wanna filter() and return the first of them
+    let c = Controller::new(svc_api, ListParams::default())
         .owns(dr_api, ListParams::default())
         .owns(vs_api, ListParams::default())
         .shutdown_on_signal()
         .run(reconcile, error_policy, Arc::new(ControllerCtx { client, metrics: Metrics::new(), event_reporter: reporter }))
-        .for_each(|res| async move {
-            match res {
-                Ok(o) => info!("reconciled {:?}", o),
-                Err(e) => warn!("reconcile failed: {:?}", e),
-            }
-        }))
+        .for_each(|_| futures::future::ready(()));
+
+    Ok(c)
 }
 
 async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action, Error> {

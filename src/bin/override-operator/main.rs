@@ -58,8 +58,10 @@ async fn main() -> anyhow::Result<()> {
         .expect("Can't bind to ::8080")
         .shutdown_timeout(5);
 
-    let controller = operator::get_controller();
+    // get_controller() is async, and returns Result<Future<()>> - the Future is the promise to run the controller loop, the Result represents the fact it might no be possile to start the controller
+    let controller = operator::get_controller().await?;
 
+    // I guess select! is clever enough to poll the Future and spawn a task to block for the immediate function
     tokio::select! {
         _ = controller => warn!("Controller bailed"),
         _ = http_server.run() => warn!("Web server bailed"),
