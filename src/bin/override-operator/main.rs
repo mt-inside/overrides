@@ -63,8 +63,13 @@ async fn main() -> anyhow::Result<()> {
 
     // I guess select! is clever enough to poll the Future and spawn a task to block for the immediate function
     tokio::select! {
-        _ = controller => warn!("Controller bailed"),
-        _ = http_server.run() => warn!("Web server bailed"),
+        // impl Future<()>
+        _ = controller => info!("Controller finished"),
+        // Result<(), std::io::Error>
+        h = http_server.run() => match h {
+            Err(err) => warn!(%err, "Web server error"),
+            Ok(_) => info!("Web server finished"),
+        },
     };
 
     info!("Terminiated");
