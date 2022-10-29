@@ -110,7 +110,7 @@ async fn update(svc: Arc<Service>, ctx: Arc<ControllerCtx>, svc_ns: &str) -> Res
     let oref = svc.controller_owner_ref(&()).unwrap();
 
     let versions = overrides::svc_versions(client, &svc).await?;
-    info!(
+    debug!(
         service = svc.metadata.name,
         versions = ?versions,
         "Selects Pod versions",

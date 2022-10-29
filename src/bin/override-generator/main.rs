@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
         .filter(|s| s.spec.as_ref().unwrap().selector.is_some())
     {
         let versions = overrides::svc_versions(&client, &svc).await?;
-        info!(
+        debug!(
             service = svc.metadata.name,
             versions = ?versions,
             "Selects Pod versions",
