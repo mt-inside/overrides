@@ -24,14 +24,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tracing_subscriber::registry()
-        //.with(filter::EnvFilter::from_default_env()) // set env RUST_LOG="overrides=off|error|warn|info|debug|trace"
         .with(filter::Targets::new().with_target("overrides", Level::TRACE).with_target("override_generator", Level::TRACE)) //off|error|warn|info|debug|trace
-        .with(
-            tracing_subscriber::fmt::layer()
-                .pretty()
-                .with_file(false) // Don't print events' source file:line
-                .with_writer(std::io::stderr),
-        )
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     let client = overrides::get_k8s_client().await?;
