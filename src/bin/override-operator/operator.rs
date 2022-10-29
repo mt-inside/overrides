@@ -84,6 +84,7 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action,
         .map_err(Error::EventPublishFailed)?;
 
     let client = &ctx.client;
+    let svc_name = svc.metadata.name.clone().ok_or(Error::MissingObjectKey(".metadata.name"))?;
     let svc_ns = svc.metadata.namespace.clone().ok_or(Error::MissingObjectKey(".metadata.namespace"))?;
     let svc_api = Api::<Service>::namespaced(client.clone(), &svc_ns);
     // finalizer()
@@ -91,7 +92,7 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action,
     // * adds a finalizer ref to the applied objects
     // * impls the finalizer, which does deletion of owned objects for you
     //   * then calls Evt::Cleanup which is just for you to log or whatever
-    let action = finalizer(&svc_api, SERVICE_FINALIZER_NAME, svc, |event| async {
+    let res = finalizer(&svc_api, SERVICE_FINALIZER_NAME, svc, |event| async {
         match event {
             // TODO: to member functions
             FinalizerEvt::Apply(svc) => update(svc, ctx.clone(), &svc_ns).await,
@@ -104,7 +105,10 @@ async fn reconcile(svc: Arc<Service>, ctx: Arc<ControllerCtx>) -> Result<Action,
     let duration = start_time.elapsed().as_millis() as f64 / 1000.0;
     ctx.metrics.reconcile_durations.with_label_values(&[]).observe(duration);
 
-    action
+    info!(svc_name, svc_ns, "Reconciled"); // TODO: bit misleading to report "reconciled" here, cause res could
+                                           // be an error. Match just Ok()?
+
+    res
 }
 
 async fn update(svc: Arc<Service>, ctx: Arc<ControllerCtx>, svc_ns: &str) -> Result<Action, kube::Error> {
@@ -143,7 +147,8 @@ async fn delete(svc: Arc<Service>, _ctx: Arc<ControllerCtx>, _svc_ns: &str) -> R
 }
 
 // The controller triggers this on reconcile errors
-fn error_policy(_object: Arc<Service>, _error: &Error, ctx: Arc<ControllerCtx>) -> Action {
+fn error_policy(_object: Arc<Service>, error: &Error, ctx: Arc<ControllerCtx>) -> Action {
     ctx.metrics.failures.inc();
+    warn!("Reconsile failed: {:?}", error);
     Action::requeue(Duration::from_secs(1))
 }

@@ -72,6 +72,6 @@ async fn main() -> anyhow::Result<()> {
         },
     };
 
-    info!("Terminiated");
+    info!("Quitting");
     Ok(())
 }
