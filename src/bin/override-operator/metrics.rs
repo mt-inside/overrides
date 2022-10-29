@@ -9,7 +9,6 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new() -> Self {
-        // TODO: tempate in override_operator
         Metrics {
             reconciliations: register_int_counter!(format!("{}_reconciliations_total", crate::NAME.replace('-', "_")), "reconciliations").unwrap(),
             failures: register_int_counter!("override_operator_failures_total", "reconciliation failures").unwrap(),
