@@ -32,4 +32,4 @@ tags
 /packages
 *.rsa*
 sbom-*
-http-log.tar
+/override-operator.tar

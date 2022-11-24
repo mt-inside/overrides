@@ -43,6 +43,7 @@ build: lint
 run: lint
 	cargo run
 
+# TODO: sent a default logging level for each one
 image-dev: lint
 	docker build -f Dockerfile.dev . --tag {{REPO}}:dev --push --platform linux/arm64
 
