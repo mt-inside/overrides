@@ -1,10 +1,14 @@
+set dotenv-load
+
 default:
 	@just --list --unsorted --color=always
 
-REPO := "docker.io/mtinside/override-operator"
+DH_USER := "mtinside"
+REPO := "docker.io/" + DH_USER + "/override-operator"
 TAG := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
 TAGD := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
-ARCHS := "linux/amd64,linux/arm64"#,linux/arm/v7"
+ARCHS := "linux/arm64" #,linux/amd64,linux/arm/v7"
+CGR_ARCHS := "aarch64" # "amd64,aarch64,armv7"
 
 # install build dependencies
 install-tools:
@@ -44,3 +48,24 @@ image-dev: lint
 
 image-release: lint
 	docker build -f Dockerfile.release . --tag {{REPO}}:{{TAG}} --push --platform {{ARCHS}}
+
+melange:
+	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/melange keygen
+	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
+package-cgr: melange
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
+	docker load < override-operator.tar
+publish-cgr: melange
+	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
+		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
+		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+
+sbom-show:
+	docker sbom {{REPO}}:{{TAG}}
+
+cosign-sign:
+	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
+	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
+cosign-verify:
+	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .

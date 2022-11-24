@@ -1,0 +1,31 @@
+package:
+  name: override-operator
+  # TODO: take as arg or something
+  version: 0.0.4
+  description: TODO
+  target-architecture: [all] # bails on a lot of them which aren't supported yet
+  copyright:
+    - paths: ["*"]
+      licence: Apache-2.0
+
+environment:
+  contents:
+    repositories:
+      - https://dl-cdn.alpinelinux.org/alpine/edge/main
+      - https://dl-cdn.alpinelinux.org/alpine/edge/community
+    packages:
+      - alpine-baselayout-data
+      - ca-certificates-bundle
+      - openssl
+      - openssl-dev
+      - pkgconfig # so openssl crate's build can find system openssl
+      # TODO: move to rustls (eg hyper-rustls and the create option)
+      - cargo
+
+pipeline:
+  - name: Build
+    runs: |
+      TARGETDIR="$(mktemp -d)"
+      cargo build --bin override-operator --release --target-dir "${TARGETDIR}"
+      mkdir -p "${{targets.destdir}}/usr/bin"
+      mv "${TARGETDIR}/release/override-operator" "${{targets.destdir}}/usr/bin"

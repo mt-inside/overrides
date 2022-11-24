@@ -26,3 +26,10 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+
+# == chainguard toolchain ==
+.env
+/packages
+*.rsa*
+sbom-*
+http-log.tar
