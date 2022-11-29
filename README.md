@@ -75,3 +75,6 @@ It basically needs its own namespace to own at this point.
 
 ## Design choices
 * Kopium pre-generation of strongly-typed resource models (vs the other options: https://kube.rs/controllers/object/)
+* Use of rustls, mostly to avoid needing to install openssl at build-time and have it available at runtime.
+  * This is really easy - a feature of the _kube_ crate, to enable this for the k8s client. Nothing else is needed atm because the http server doesn't serve TLS.
+  * To go back to openssl, melange needs the following packages: openssl, openssl-dev, pkgconfig (for Alpine) or openssl, pkgconf (for Wolfi)
