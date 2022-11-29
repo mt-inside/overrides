@@ -9,6 +9,7 @@ default-run = "override-generator"
 strip = true
 opt-level = "z"  # Optimize for size.
 lto = true # Link-Time Optimisation, eg dead code removal.
+codegen-units = 1
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
