@@ -22,9 +22,6 @@ environment:
     packages:
       - wolfi-base
       - build-base # includes pkgconf, an impl of pkg-config
-      # TODO: move to rustls (eg hyper-rustls and the create option)
-      - openssl # includes headers
-        #- pkgconfig # so openssl crate's build can find system openssl
       - rust-stage0 # Seems to be cargo, rather than rustup[-init]
 
 pipeline:
