@@ -7,8 +7,7 @@ DH_USER := "mtinside"
 REPO := "docker.io/" + DH_USER + "/override-operator"
 TAG := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
 TAGD := `cargo metadata --format-version 1 --no-deps -q | jq -r '.packages[0].version'`
-ARCHS := "linux/arm64" #,linux/amd64,linux/arm/v7"
-CGR_ARCHS := "aarch64" # "amd64,aarch64,armv7"
+ARCHS := "aarch64" # ",amd64,armv7"
 
 # install build dependencies
 install-tools:
@@ -37,30 +36,34 @@ generate:
 lint:
 	cargo clippy -- -D warnings # warn=>err
 
+# Builds both binaries
 build: lint
 	cargo build
 
-run: lint
+run-generator: lint
 	cargo run
-
-# TODO: sent a default logging level for each one
-image-dev: lint
-	docker build -f Dockerfile.dev . --tag {{REPO}}:dev --push --platform linux/arm64
-
-image-release: lint
-	docker build -f Dockerfile.release . --tag {{REPO}}:{{TAG}} --push --platform {{ARCHS}}
+run-operator: lint
+	cargo run --bin override-operator
 
 melange:
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
 	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/melange keygen
-	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
-package-cgr: melange
-	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
+	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{ARCHS}} --signing-key melange.rsa melange.yaml
+# TODO: sent a default logging level for each one
+image-load-dev: melange
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{ARCHS}} apko.yaml {{REPO}}:dev override-operator.tar
 	docker load < override-operator.tar
-publish-cgr: melange
+image-publish-dev: melange
 	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+		apko publish apko.yaml {{REPO}}:dev -k melange.rsa.pub --arch {{ARCHS}}'
+image-load-release: melange
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
+	docker load < override-operator.tar
+image-publish-release: melange
+	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
+		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
+		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{ARCHS}}'
 
 sbom-show:
 	docker sbom {{REPO}}:{{TAG}}
