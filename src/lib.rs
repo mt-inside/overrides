@@ -17,7 +17,7 @@ struct Selector<'a>(&'a BTreeMap<String, String>);
 
 impl fmt::Display for Selector<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<String>>().join(","))
+        f.write_str(&self.0.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<String>>().join(","))
     }
 }
 

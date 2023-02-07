@@ -54,13 +54,13 @@ async fn main() -> anyhow::Result<()> {
 
     for dr in drs {
         let dry = serde_yaml::to_string(&dr)?;
-        println!("{}", dry);
+        println!("{dry}");
         println!("---"); // hack
     }
 
     for vs in vss {
         let vsy = serde_yaml::to_string(&vs)?;
-        println!("{}", vsy);
+        println!("{vsy}");
         println!("---"); // hack
     }
 
