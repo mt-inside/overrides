@@ -1,7 +1,7 @@
 pub mod istio;
 
-use istio::destinationrules_networking_istio_io::*;
-use istio::virtualservices_networking_istio_io::*;
+use istio::destinationrules_networking_istio_io_v1beta1::*;
+use istio::virtualservices_networking_istio_io_v1beta1::*;
 use k8s_openapi::api::core::v1::{Pod, Service};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::{

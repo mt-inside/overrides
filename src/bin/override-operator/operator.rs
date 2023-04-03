@@ -10,8 +10,8 @@ use kube::{
     },
     Client,
 };
-use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
-use overrides::istio::virtualservices_networking_istio_io::VirtualService;
+use overrides::istio::destinationrules_networking_istio_io_v1beta1::DestinationRule;
+use overrides::istio::virtualservices_networking_istio_io_v1beta1::VirtualService;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};

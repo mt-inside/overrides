@@ -1,8 +1,8 @@
 use clap::Parser;
 use k8s_openapi::api::core::v1::Service;
 use kube::api::Api;
-use overrides::istio::destinationrules_networking_istio_io::DestinationRule;
-use overrides::istio::virtualservices_networking_istio_io::VirtualService;
+use overrides::istio::destinationrules_networking_istio_io_v1beta1::DestinationRule;
+use overrides::istio::virtualservices_networking_istio_io_v1beta1::VirtualService;
 use tracing::*;
 use tracing_subscriber::{filter, prelude::*};
 

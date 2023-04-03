@@ -16,22 +16,29 @@ install-tools:
 
 generate:
 	#!/usr/bin/env bash
-	curl -s https://raw.githubusercontent.com/istio/istio/master/manifests/charts/base/crds/crd-all.gen.yaml
+	yq="docker run -i --rm mikefarah/yq"
 	src=./crd-all.gen.yaml
+	curl -s https://raw.githubusercontent.com/istio/istio/master/manifests/charts/base/crds/crd-all.gen.yaml > ${src}
+	# mirror_percent and mirrorPercent clash, as they both render to the same Rust field name. Remove one. Doesn't matter which, as they're both deprecated; it's mirrorPercentage now
+	cat ${src} | ${yq} eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.http.items.properties.mirror_percent)' | sponge ${src}
+	cat ${src} | ${yq} eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.jwtRules.items.properties.jwks_uri)' | sponge ${src}
 	dir=src/istio
 	mkdir -p ${dir}
-	crds="$(cat ${src} | docker run -i --rm mikefarah/yq eval-all '[.metadata.name] | .[]' | grep -vi 'requestauth' | grep -vi 'peerauth')"
+	crds="$(cat ${src} | ${yq} eval-all '[.metadata.name] | .[]')"
+	echo '// Generated file' > ${dir}/mod.rs
 	for crd in ${crds}
 	do
-		echo "Outputting ${crd}"
-		# Can't -D default, because while it works for the structs (which contain Options, which have an impl of Default), but not the enums, which don't mark #[Default]
-		cat ${src} | docker run -i --rm mikefarah/yq eval 'select(.metadata.name=="'${crd}'")' | kopium -A -D Default -f - --api-version v1beta1 | grep -v 'kube(status' > ${dir}/${crd//./_}.rs
+		echo "Processing ${crd}"
+		vers="$(cat ${src} | ${yq} eval-all 'select(.metadata.name=="'${crd}'") | [.spec.versions[].name] | .[]')"
+		for ver in ${vers}
+		do
+			basenam=${crd//./_}_${ver}
+			echo "Outputting ${ver} > ${basenam}"
+			# Can't -D default, because while it works for the structs (which contain Options, which have an impl of Default), but not the enums, which don't mark #[Default]
+			cat ${src} | ${yq} eval 'select(.metadata.name=="'${crd}'") | del(.spec.versions[] | select(.name != "'${ver}'"))' | kopium --auto -D Default -f - | grep -v 'kube(status' > ${dir}/${basenam}.rs
+			echo "pub mod ${basenam};" >> ${dir}/mod.rs
+		done
 	done
-	echo "${crds//./_}" | sed 's/\(.*\)/pub mod \1;/' > ${dir}/mod.rs
-	#no_docs=$(curl -sSL https://raw.githubusercontent.com/istio/istio/master/manifests/charts/base/crds/crd-all.gen.yaml | yq eval-all '[.] | length')
-	# Last document is empty, because of a trailing ---
-	#for (( i=0; i<${no_docs}-1; i++ ))
-		#curl -sSL https://raw.githubusercontent.com/istio/istio/master/manifests/charts/base/crds/crd-all.gen.yaml | yq eval 'select(di == '${i}')' | kopium -Af - > istio-$i.rs
 
 lint:
 	cargo clippy -- -D warnings # warn=>err
