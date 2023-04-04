@@ -28,6 +28,8 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
+    info!(version = %version_check::Version::read().unwrap(), "Rustc");
+
     let client = overrides::get_k8s_client().await?;
 
     let svcs_api: Api<Service> = Api::default_namespaced(client.clone());
