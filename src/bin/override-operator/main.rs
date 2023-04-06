@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!(VERSION, "{}", NAME);
-    info!(version = %version_check::Version::read().unwrap(), "Rustc");
+    version_check::Version::read().iter().for_each(|v| info!(version = %v, "Rustc"));
 
     let http_server = HttpServer::new(move || App::new().app_data(Data::new(())).wrap(middleware::Logger::default().exclude("/health")).service(metrics::metrics).service(health))
         .bind("0.0.0.0:8080")
