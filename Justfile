@@ -62,19 +62,19 @@ melange:
 	{{MELANGE}} build --arch {{ARCHS}} --signing-key /work/melange.rsa melange.yaml
 # TODO: sent a default logging level for each one
 image-load-dev:
-	{{APKO}} build -k melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:dev override-operator.tar
+	{{APKO}} build --keyring-append melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:dev override-operator.tar
 	docker load < override-operator.tar
 image-publish-dev:
 	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko.yaml {{REPO}}:dev -k melange.rsa.pub --arch {{ARCHS}}'
+		apko publish apko.yaml {{REPO}}:dev --keyring-append melange.rsa.pub --arch {{ARCHS}}'
 image-load-release:
-	{{APKO}} build -k melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
+	{{APKO}} build --keyring-append melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
 	docker load < override-operator.tar
 image-publish-release:
 	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{ARCHS}}'
+		apko publish apko.yaml {{REPO}}:{{TAG}} --keyring-append melange.rsa.pub --arch {{ARCHS}}'
 
 sbom-show:
 	docker sbom {{REPO}}:{{TAG}}
