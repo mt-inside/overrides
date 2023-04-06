@@ -1,11 +1,11 @@
 contents:
   repositories:
     - https://dl-cdn.alpinelinux.org/alpine/edge/main
-    - '@local /work/packages'
+    - /work/packages
   packages:
     - alpine-baselayout-data
     - ca-certificates-bundle
-    - 'override-operator@local'
+    - override-operator
 
 accounts:
   groups:

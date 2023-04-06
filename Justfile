@@ -52,23 +52,27 @@ run-generator: lint
 run-operator: lint
 	cargo run --bin override-operator
 
+MELANGE := "docker run --pull always --rm --privileged -v ${PWD}:/work cgr.dev/chainguard/melange:latest"
+APKO    := "docker run --pull always --rm -v ${PWD}:/work cgr.dev/chainguard/apko:latest"
+APKO_SH := "docker run --pull always --rm -v ${PWD}:/work --entrypoint sh cgr.dev/chainguard/apko:latest"
+
 melange:
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
-	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/melange keygen
-	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{ARCHS}} --signing-key melange.rsa melange.yaml
+	{{MELANGE}} keygen
+	{{MELANGE}} build --arch {{ARCHS}} --signing-key /work/melange.rsa melange.yaml
 # TODO: sent a default logging level for each one
-image-load-dev: melange
-	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{ARCHS}} apko.yaml {{REPO}}:dev override-operator.tar
+image-load-dev:
+	{{APKO}} build -k melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:dev override-operator.tar
 	docker load < override-operator.tar
-image-publish-dev: melange
-	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
+image-publish-dev:
+	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
 		apko publish apko.yaml {{REPO}}:dev -k melange.rsa.pub --arch {{ARCHS}}'
-image-load-release: melange
-	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --debug --build-arch {{ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
+image-load-release:
+	{{APKO}} build -k melange.rsa.pub --debug --arch {{ARCHS}} apko.yaml {{REPO}}:{{TAG}} override-operator.tar
 	docker load < override-operator.tar
-image-publish-release: melange
-	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
+image-publish-release:
+	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
 		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{ARCHS}}'
 
