@@ -2,11 +2,12 @@ use crate::metrics::Metrics;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, Resource},
+    api::{Api, Patch, PatchParams, Resource},
     runtime::{
         controller::{Action, Controller},
         events::{Event, EventType, Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvt},
+        watcher,
     },
     Client,
 };
@@ -57,9 +58,9 @@ pub async fn get_controller() -> Result<impl futures::future::Future, kube::Erro
     //   Other options would include
     //   - fold() the stream to some aggregate of it and return that - num reconciles etc
     //   - the Errors are reconcile errors, better called Exceptions, which are recoverable and which you don't want to quit for, so we don't wanna filter() and return the first of them
-    let c = Controller::new(svc_api, ListParams::default())
-        .owns(dr_api, ListParams::default())
-        .owns(vs_api, ListParams::default())
+    let c = Controller::new(svc_api, watcher::Config::default().any_semantic())
+        .owns(dr_api, watcher::Config::default())
+        .owns(vs_api, watcher::Config::default())
         .shutdown_on_signal()
         .run(reconcile, error_policy, Arc::new(ControllerCtx { client, metrics: Metrics::new(), event_reporter: reporter }))
         .for_each(|_| futures::future::ready(()));
