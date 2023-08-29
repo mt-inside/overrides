@@ -94,7 +94,7 @@ pub fn vs_for_versions(svc: &Service, versions: &[String], oref: Option<OwnerRef
             // gateways: implicity "mesh"
             hosts: Some(vec![host_fqdn.clone()]),
             http: Some(
-                vec![
+                [
                     versions
                         .iter()
                         .map(|v| VirtualServiceHttp {
