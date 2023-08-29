@@ -16,16 +16,16 @@ anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version="0.3", features=["std", "registry", "json", "env-filter"] }
-kube = { version = "0.83", default-features = false, features = ["rustls-tls", "client", "runtime", "derive"] }
-k8s-openapi = { version = "0.18", features = ["v1_26"] }
-tokio = { version = "1.27", features = ["full"] }
+kube = { version = "0.85", default-features = false, features = ["rustls-tls", "client", "runtime", "derive"] }
+k8s-openapi = { version = "0.19", features = ["v1_27"] }
+tokio = { version = "1.32", features = ["full"] }
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
 schemars = { version = "0.8", features = ["chrono"] }
 maplit = "1.0"
-clap = { version = "4.2", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
 prometheus = "0.13"
-actix-web = "4.3"
+actix-web = "4.4"
 version_check = "0.9"
